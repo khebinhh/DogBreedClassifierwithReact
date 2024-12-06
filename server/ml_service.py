@@ -107,78 +107,132 @@ class DogBreedClassifier:
         logging.info("Image transforms initialized successfully")
 
     async def load_model(self):
-        """Load the model with proper error handling"""
+        """Load the model with proper error handling and lazy initialization"""
         if self.model is not None:
             return
 
-        try:
-            logging.info("Loading ResNet50 model...")
-            # Initialize model with pre-trained weights
-            self.model = resnet50(weights=ResNet50_Weights.IMAGENET1K_V1)
-            
-            # Replace final layers for better feature extraction
-            num_features = self.model.fc.in_features
-            self.model.fc = nn.Sequential(
-                nn.Linear(num_features, 512),
-                nn.ReLU(),
-                nn.Dropout(0.5),
-                nn.Linear(512, len(BREED_CLASSES))
-            )
-            self.model = self.model.to(self.device)
-            
-            # Initialize optimizer
-            self.optimizer = torch.optim.Adam(self.model.parameters(), lr=0.001)
-            
-            logging.info("Model loaded and initialized successfully")
-            
-        except Exception as e:
-            logging.error(f"Error loading model: {str(e)}")
-            self.model = None
-            raise
+        max_retries = 3
+        retry_count = 0
+        
+        while retry_count < max_retries:
+            try:
+                logging.info(f"Loading ResNet50 model (attempt {retry_count + 1}/{max_retries})...")
+                
+                # Set torch hub directory to ensure we have write permissions
+                torch.hub.set_dir('./models/torch_hub')
+                
+                # Initialize model with pre-trained weights and improved architecture
+                self.model = resnet50(weights=ResNet50_Weights.IMAGENET1K_V1)
+                num_features = self.model.fc.in_features
+                self.model.fc = nn.Sequential(
+                    nn.Linear(num_features, 1024),
+                    nn.ReLU(),
+                    nn.Dropout(0.5),
+                    nn.Linear(1024, 512),
+                    nn.ReLU(),
+                    nn.Dropout(0.3),
+                    nn.Linear(512, len(BREED_CLASSES))
+                )
+                self.model = self.model.to(self.device)
+                
+                # Initialize optimizer
+                self.optimizer = torch.optim.Adam(self.model.parameters(), lr=0.001)
+                
+                logging.info("Model loaded and initialized successfully")
+                return
+                
+            except Exception as e:
+                logging.error(f"Error loading model (attempt {retry_count + 1}): {str(e)}")
+                self.model = None
+                retry_count += 1
+                if retry_count < max_retries:
+                    logging.info(f"Retrying in 2 seconds...")
+                    await asyncio.sleep(2)
+        
+        raise Exception(f"Failed to load model after {max_retries} attempts")
 
     async def train_model(self):
-        """Train the model on Stanford Dogs Dataset"""
+        """Train the model on Stanford Dogs Dataset with validation"""
         if self.model is None:
             await self.load_model()
             
-        # Training parameters
-        num_epochs = 50
+        # Set up training parameters
+        num_epochs = 30
         batch_size = 32
+        learning_rate = 0.001
+        best_accuracy = 0
+        patience = 3
         
-        # Create data loaders
-        train_dataset = ImageFolder('data/stanford-dogs/Images', transform=self.train_transform)
+        # Split dataset into train/validation
+        dataset = ImageFolder('data/stanford-dogs/Images', transform=self.train_transform)
+        train_size = int(0.8 * len(dataset))
+        val_size = len(dataset) - train_size
+        train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
+        
         train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+        val_loader = DataLoader(val_dataset, batch_size=batch_size)
         
-        logging.info("Starting training...")
-        for epoch in range(num_epochs):
-            self.model.train()
-            running_loss = 0.0
-            correct = 0
-            total = 0
+        # Training loop with validation
+        for run in range(3):  # Run training 3 times
+            logging.info(f"Starting training run {run + 1}/3")
             
-            for inputs, labels in train_loader:
-                inputs, labels = inputs.to(self.device), labels.to(self.device)
+            for epoch in range(num_epochs):
+                # Training phase
+                self.model.train()
+                train_loss = 0.0
+                train_correct = 0
+                train_total = 0
                 
-                self.optimizer.zero_grad()
-                outputs = self.model(inputs)
-                loss = self.criterion(outputs, labels)
-                loss.backward()
-                self.optimizer.step()
+                for inputs, labels in tqdm(train_loader, desc=f"Epoch {epoch+1}/{num_epochs}"):
+                    inputs, labels = inputs.to(self.device), labels.to(self.device)
+                    
+                    self.optimizer.zero_grad()
+                    outputs = self.model(inputs)
+                    loss = self.criterion(outputs, labels)
+                    loss.backward()
+                    self.optimizer.step()
+                    
+                    train_loss += loss.item()
+                    _, predicted = outputs.max(1)
+                    train_total += labels.size(0)
+                    train_correct += predicted.eq(labels).sum().item()
                 
-                running_loss += loss.item()
-                _, predicted = outputs.max(1)
-                total += labels.size(0)
-                correct += predicted.eq(labels).sum().item()
-            
-            accuracy = 100. * correct / total
-            logging.info(f'Epoch {epoch+1}/{num_epochs}, Loss: {running_loss/len(train_loader):.3f}, Accuracy: {accuracy:.2f}%')
-            
-            # Save checkpoint every 5 epochs
-            if (epoch + 1) % 5 == 0:
-                torch.save(self.model.state_dict(), f'models/model_epoch_{epoch+1}.pth')
-        
-        logging.info("Training completed")
-        torch.save(self.model.state_dict(), 'models/final_model.pth')
+                # Validation phase
+                self.model.eval()
+                val_loss = 0.0
+                val_correct = 0
+                val_total = 0
+                
+                with torch.no_grad():
+                    for inputs, labels in val_loader:
+                        inputs, labels = inputs.to(self.device), labels.to(self.device)
+                        outputs = self.model(inputs)
+                        loss = self.criterion(outputs, labels)
+                        
+                        val_loss += loss.item()
+                        _, predicted = outputs.max(1)
+                        val_total += labels.size(0)
+                        val_correct += predicted.eq(labels).sum().item()
+                
+                train_accuracy = 100. * train_correct / train_total
+                val_accuracy = 100. * val_correct / val_total
+                
+                logging.info(f'Run {run+1}, Epoch {epoch+1}/{num_epochs}:')
+                logging.info(f'Train Loss: {train_loss/len(train_loader):.3f}, Train Accuracy: {train_accuracy:.2f}%')
+                logging.info(f'Val Loss: {val_loss/len(val_loader):.3f}, Val Accuracy: {val_accuracy:.2f}%')
+                
+                # Save if validation accuracy improves
+                if val_accuracy > best_accuracy:
+                    best_accuracy = val_accuracy
+                    torch.save(self.model.state_dict(), 'models/best_model.pth')
+                    logging.info(f'New best model saved with validation accuracy: {val_accuracy:.2f}%')
+                
+                # Early stopping if we reach target accuracy
+                if val_accuracy >= 70.0:
+                    logging.info(f'Reached target accuracy of 70%! Stopping training.')
+                    return
+                
+            logging.info(f'Completed training run {run + 1}/3')
 
     async def preprocess_image(self, image_bytes):
         """Preprocess image for model input"""

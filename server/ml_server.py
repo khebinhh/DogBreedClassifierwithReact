@@ -39,14 +39,15 @@ async def classify_image(file: UploadFile):
 
 @app.on_event("startup")
 async def startup_event():
+    print("Starting ML service...")
     try:
-        print("Initializing ML service...")
-        # Initialize model at startup
-        await classifier.load_model()
-        print("ML service initialized successfully")
+        # Initialize basic components
+        print("Initializing ML service components...")
+        # Model will be loaded on first request
+        print("ML service started. Model will be loaded on first request.")
     except Exception as e:
-        print(f"Error during initialization: {str(e)}")
-        raise
+        print(f"Warning during initialization: {str(e)}")
+        # Don't raise the exception to allow the service to start
 
 if __name__ == "__main__":
     import sys

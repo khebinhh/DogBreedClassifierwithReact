@@ -1,4 +1,4 @@
-modules = ["nodejs-20", "web", "postgresql-16"]
+modules = ["nodejs-20", "web", "postgresql-16", "python-3.11"]
 run = "npm run dev"
 hidden = [".config", ".git", "generated-icon.png", "node_modules", "dist"]
 
@@ -8,11 +8,15 @@ channel = "stable-24_05"
 [deployment]
 deploymentTarget = "cloudrun"
 build = ["npm", "run", "build"]
-run = ["sh", "-c", "npm run dev"]
+run = ["sh", "-c", "python3 server/ml_server.py"]
 
 [[ports]]
 localPort = 5000
 externalPort = 80
+
+[[ports]]
+localPort = 8000
+externalPort = 8000
 
 [workflows]
 runButton = "Project"
@@ -24,7 +28,26 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
+args = "ML Service"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
 args = "Start Dev Server"
+
+[[workflows.workflow]]
+name = "ML Service"
+author = "agent"
+
+[workflows.workflow.metadata]
+agentRequireRestartOnSave = false
+
+[[workflows.workflow.tasks]]
+task = "packager.installForAll"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python3 server/ml_server.py"
+waitForPort = 8000
 
 [[workflows.workflow]]
 name = "Start Dev Server"

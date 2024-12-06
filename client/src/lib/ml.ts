@@ -1,9 +1,15 @@
-import * as tf from '@tensorflow/tfjs';
+// Types for classification results
+interface Prediction {
+  breed: string;
+  confidence: number;
+}
 
-// Model URL for a MobileNetV2 model
-const MODEL_URL = 'https://tfhub.dev/google/imagenet/mobilenet_v2_130_224/classification/5';
+interface ClassificationResult {
+  predictions: Prediction[];
+  referenceImages: string[];
+}
 
-// Mapping of model output indices to dog breeds
+// Mapping of model output indices to dog breeds (This remains, though unused in the modified logic)
 const BREED_CLASSES = [
   'Labrador',
   'Golden Retriever',
@@ -17,106 +23,36 @@ const BREED_CLASSES = [
   'Dachshund'
 ];
 
-let modelPromise: Promise<tf.GraphModel> | null = null;
 
-async function loadModel(): Promise<tf.GraphModel> {
-  if (!modelPromise) {
-    try {
-      console.log('Loading model...');
-      modelPromise = tf.loadGraphModel(MODEL_URL);
-      await modelPromise; // Ensure model loads
-      console.log('Model loaded successfully');
-      return modelPromise;
-    } catch (error: any) {
-      console.error('Model loading error:', error);
-      modelPromise = null;
-      throw new Error(error?.message || 'Failed to load model');
-    }
-  }
-  return modelPromise;
-}
-
-async function preprocessImage(file: File): Promise<tf.Tensor> {
-  try {
-    console.log('Starting image preprocessing...');
-    const img = await createImageBitmap(file);
-    return tf.tidy(() => {
-      console.log('Converting image to tensor...');
-      const imgTensor = tf.browser.fromPixels(img)
-        .resizeBilinear([224, 224])
-        .toFloat()
-        .sub(127.5)
-        .div(127.5)
-        .expandDims();
-      console.log('Image preprocessing complete');
-      return imgTensor;
-    });
-  } catch (error: any) {
-    console.error('Image preprocessing error:', error);
-    throw new Error(error?.message || 'Failed to preprocess image');
-  }
-}
-
-export async function classifyImage(file: File) {
-  let imageTensor: tf.Tensor | null = null;
-  let predictions: tf.Tensor | null = null;
-  let probabilities: tf.Tensor | null = null;
-
+export async function classifyImage(file: File): Promise<ClassificationResult> {
   try {
     console.log('Starting classification process...');
-    tf.engine().startScope();
     
-    const model = await loadModel();
-    console.log('Model loaded, preprocessing image...');
-    imageTensor = await preprocessImage(file);
+    // Create form data
+    const formData = new FormData();
+    formData.append('file', file);
     
-    // Get predictions
-    console.log('Running inference...');
-    predictions = model.predict(imageTensor) as tf.Tensor;
-    probabilities = tf.softmax(predictions);
+    // Send request to PyTorch backend
+    const response = await fetch('http://localhost:8000/classify', {
+      method: 'POST',
+      body: formData,
+    });
     
-    console.log('Getting prediction probabilities...');
-    const values = await probabilities.data();
-
-    // Get top 3 predictions
-    console.log('Processing prediction results...');
-    const topPredictions = Array.from(values)
-      .map((confidence, index) => ({
-        breed: BREED_CLASSES[index] || 'Unknown Breed',
-        confidence: parseFloat(confidence.toFixed(4))
-      }))
-      .sort((a, b) => b.confidence - a.confidence)
-      .slice(0, 3);
-
-    console.log('Top predictions:', topPredictions);
-
-    // Generate reference image URLs based on breed names
-    const referenceImages = topPredictions.map(pred => 
-      `https://source.unsplash.com/featured/?${encodeURIComponent(pred.breed.toLowerCase())},dog`
-    );
-
-    console.log('Classification complete');
-    return {
-      predictions: topPredictions,
-      referenceImages
-    };
-
+    if (!response.ok) {
+      throw new Error('Classification failed');
+    }
+    
+    const result = await response.json();
+    console.log('Classification complete:', result);
+    
+    return result;
   } catch (error: any) {
     console.error('Classification error:', error);
     throw new Error(error?.message || 'Failed to classify image');
-  } finally {
-    console.log('Cleaning up tensors...');
-    // Clean up all tensors
-    if (imageTensor) tf.dispose(imageTensor);
-    if (predictions) tf.dispose(predictions);
-    if (probabilities) tf.dispose(probabilities);
-    tf.engine().endScope();
-    console.log('Cleanup complete');
   }
 }
 
-// Memory management utility
+// Memory management utility (This remains, though largely irrelevant without TensorFlow)
 export function clearTensorMemory() {
-  tf.engine().endScope();
-  tf.engine().startScope();
+  // No TensorFlow cleanup needed here anymore.  This function is retained for consistency, but is effectively a no-op.
 }

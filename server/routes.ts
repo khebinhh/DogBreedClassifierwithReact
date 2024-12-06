@@ -39,39 +39,28 @@ export function registerRoutes(app: Express) {
       // Upload image to a temporary URL (in production, use proper storage)
       const imageUrl = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
       
-      // Process the image using TensorFlow.js
-      const tf = require('@tensorflow/tfjs-node');
-      const model = await tf.loadGraphModel('https://tfhub.dev/google/imagenet/mobilenet_v2_130_224/classification/5');
-      
-      // Preprocess image
-      const image = await tf.node.decodeImage(req.file.buffer);
-      const processedImage = tf.tidy(() => {
-        return tf.image
-          .resizeBilinear(image, [224, 224])
-          .toFloat()
-          .sub(127.5)
-          .div(127.5)
-          .expandDims();
+      // Process the image using PyTorch service
+      const response = await fetch('http://localhost:8000/classify', {
+        method: 'POST',
+        body: req.file.buffer,
+        headers: {
+          'Content-Type': 'application/octet-stream'
+        }
       });
-      
-      // Get predictions
-      const predictions = await model.predict(processedImage).data();
-      const confidence = Math.max(...predictions);
-      const breedIndex = predictions.indexOf(confidence);
-      
-      // Map to breed (simplified mapping)
-      const breeds = ['Labrador', 'Golden Retriever', 'German Shepherd', 'Bulldog', 'Poodle'];
-      const breed = breeds[breedIndex % breeds.length];
+
+      if (!response.ok) {
+        throw new Error('Classification service failed');
+      }
+
+      const classificationResult = await response.json();
+      const topPrediction = classificationResult.predictions[0];
       
       // Store classification result
       const result = await db.insert(classifications).values({
         imageUrl,
-        breed,
-        confidence: confidence.toFixed(4),
+        breed: topPrediction.breed,
+        confidence: topPrediction.confidence.toFixed(4),
       }).returning();
-      
-      // Cleanup
-      tf.dispose([image, processedImage]);
 
       res.json(result[0]);
     } catch (error) {

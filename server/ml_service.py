@@ -255,8 +255,30 @@ class DogBreedClassifier:
             raise Exception(f"Failed to train model: {str(e)}")
 
     async def preprocess_image(self, image_bytes):
-        image = Image.open(io.BytesIO(image_bytes)).convert('RGB')
-        return self.transform(image).unsqueeze(0).to(self.device)
+        try:
+            # Open and validate image
+            image = Image.open(io.BytesIO(image_bytes))
+            if not image:
+                raise ValueError("Failed to open image")
+            
+            # Convert to RGB and validate size
+            image = image.convert('RGB')
+            if image.size[0] < 32 or image.size[1] < 32:
+                raise ValueError("Image dimensions too small")
+                
+            # Enhanced preprocessing with additional normalization steps
+            processed = self.transform(image)
+            
+            # Additional normalization steps
+            processed = torch.clamp(processed, min=-3.0, max=3.0)  # Clip extreme values
+            processed = processed - processed.mean(dim=(1,2), keepdim=True)  # Center each channel
+            processed = processed / (processed.std(dim=(1,2), keepdim=True) + 1e-6)  # Normalize variance
+            
+            return processed.unsqueeze(0).to(self.device)
+            
+        except Exception as e:
+            print(f"Error in image preprocessing: {str(e)}")
+            raise ValueError(f"Image preprocessing failed: {str(e)}")
 
     async def classify_image(self, image_bytes):
         try:
@@ -275,29 +297,33 @@ class DogBreedClassifier:
                 output = self.model(input_tensor)
                 probabilities = torch.nn.functional.softmax(output[0], dim=0)
             
-            # Get top predictions
-            print("Computing top predictions...")
-            top_probs, top_indices = torch.topk(probabilities, k=3)
+            # Get top predictions with confidence threshold
+            confidence_threshold = 0.01  # 1% minimum confidence
+            filtered_probs = probabilities[probabilities >= confidence_threshold]
+            if len(filtered_probs) == 0:
+                print("No predictions above confidence threshold")
+                filtered_probs = probabilities  # Fallback to top 3 regardless of confidence
             
-            # Convert to list of predictions
+            print("Computing top predictions...")
+            top_probs, top_indices = torch.topk(probabilities, k=min(3, len(filtered_probs)))
+            
+            # Convert to list of predictions with formatted breed names
             predictions = [
                 {
-                    'breed': BREED_CLASSES[idx % len(BREED_CLASSES)],
+                    'breed': breed.split('-', 1)[1].replace('_', ' ').title(),
                     'confidence': float(prob)
                 }
                 for prob, idx in zip(top_probs.cpu().numpy(), top_indices.cpu().numpy())
+                if float(prob) >= confidence_threshold
             ]
             
-            # Generate reference images with proper breed name formatting
-            reference_images = []
-            for pred in predictions:
-                # Extract the actual breed name from the class ID (remove the initial n* prefix)
-                breed_name = pred['breed'].split('-', 1)[1].replace('_', ' ').title()
-                reference_images.append(
-                    f"https://source.unsplash.com/featured/?{breed_name},dog"
-                )
-                print(f"Generated reference image for breed: {breed_name}")
+            # Generate reference images
+            reference_images = [
+                f"https://source.unsplash.com/featured/?{pred['breed']},dog"
+                for pred in predictions
+            ]
             
+            print(f"Generated predictions: {predictions}")
             return {
                 'predictions': predictions,
                 'referenceImages': reference_images

@@ -57,7 +57,18 @@ async def startup_event():
 if __name__ == "__main__":
     try:
         print("Starting ML service...")
-        uvicorn.run(app, host="0.0.0.0", port=8000)
+        # Initialize model before starting server
+        classifier.device = torch.device('cpu')
+        if classifier.model is None:
+            classifier.model = CustomResNet(len(BREED_CLASSES))
+            classifier.model.eval()
+            classifier.model.to(classifier.device)
+            print("Model initialized successfully")
+        
+        # Start the server
+        uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
     except Exception as e:
         print(f"Failed to start ML service: {str(e)}")
+        import traceback
+        traceback.print_exc()
         raise

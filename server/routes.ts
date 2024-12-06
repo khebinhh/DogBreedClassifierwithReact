@@ -61,16 +61,20 @@ export function registerRoutes(app: Express) {
 
       const classificationResult = await response.json();
       console.log('Classification result:', classificationResult);
-      const topPrediction = classificationResult.predictions[0];
       
-      // Store classification result
-      const result = await db.insert(classifications).values({
+      // Store top prediction in database
+      const topPrediction = classificationResult.predictions[0];
+      await db.insert(classifications).values({
         imageUrl,
         breed: topPrediction.breed,
         confidence: topPrediction.confidence.toFixed(4),
-      }).returning();
+      });
 
-      res.json(result[0]);
+      // Send complete classification result to client
+      res.json({
+        ...classificationResult,
+        imageUrl // Include the stored image URL
+      });
     } catch (error) {
       console.error('Classification error:', error);
       res.status(500).json({ error: "Classification failed" });

@@ -1,12 +1,27 @@
 // Types for classification results
-interface Prediction {
+export interface Prediction {
   breed: string;
   confidence: number;
 }
 
-interface ClassificationResult {
+export interface ClassificationResult {
   predictions: Prediction[];
   referenceImages: string[];
+  imageUrl: string;
+}
+
+// Type guard for checking response structure
+export function isValidClassificationResult(data: any): data is ClassificationResult {
+  return (
+    data &&
+    Array.isArray(data.predictions) &&
+    data.predictions.every((p: any) => 
+      typeof p.breed === 'string' && 
+      typeof p.confidence === 'number'
+    ) &&
+    Array.isArray(data.referenceImages) &&
+    typeof data.imageUrl === 'string'
+  );
 }
 
 // Mapping of model output indices to dog breeds (This remains, though unused in the modified logic)

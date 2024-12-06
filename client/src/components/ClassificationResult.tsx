@@ -2,14 +2,21 @@ import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
-import { classifyImage } from "../lib/ml";
+import { classifyImage, type ClassificationResult, isValidClassificationResult } from "../lib/ml";
+import { useState, useEffect } from "react";
 
 interface ClassificationResultProps {
   image: File;
   processing: boolean;
 }
 
+interface ValidationError {
+  message: string;
+}
+
 export default function ClassificationResult({ image, processing }: ClassificationResultProps) {
+  const [validationError, setValidationError] = useState<ValidationError | null>(null);
+
   const { data, isLoading, error } = useQuery({
     queryKey: ["classify", image],
     queryFn: () => classifyImage(image),
@@ -17,13 +24,27 @@ export default function ClassificationResult({ image, processing }: Classificati
     retry: 1,
   });
 
+  useEffect(() => {
+    if (data && !isValidClassificationResult(data)) {
+      setValidationError({ message: "Invalid response format from server" });
+    } else {
+      setValidationError(null);
+    }
+  }, [data]);
+
+  // Type guard assertion for TypeScript
+  const result: ClassificationResult | undefined = 
+    data && isValidClassificationResult(data) ? data : undefined;
+
   // Create object URL for image preview
   const imageUrl = image ? URL.createObjectURL(image) : null;
 
-  if (error) {
+  if (error || validationError) {
     return (
       <div className="p-4 border border-red-200 rounded-lg bg-red-50">
-        <p className="text-red-600">Failed to classify image. Please try again.</p>
+        <p className="text-red-600">
+          {validationError ? validationError.message : "Failed to classify image. Please try again."}
+        </p>
       </div>
     );
   }

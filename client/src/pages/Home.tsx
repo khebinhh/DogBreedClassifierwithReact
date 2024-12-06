@@ -40,7 +40,7 @@ export default function Home() {
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="flex flex-col items-center gap-8">
-        <h1 className="text-4xl font-bold text-primary">PawID: Dog Breed Classifier</h1>
+        <h1 className="text-4xl font-bold text-primary">Dog Breed Classifier</h1>
         
         <Card className="w-full max-w-3xl p-6">
           <UploadZone onUpload={handleImageUpload} />

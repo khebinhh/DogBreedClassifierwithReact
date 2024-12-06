@@ -307,15 +307,21 @@ class DogBreedClassifier:
             print("Computing top predictions...")
             top_probs, top_indices = torch.topk(probabilities, k=min(3, len(filtered_probs)))
             
-            # Convert to list of predictions with formatted breed names
-            predictions = [
-                {
-                    'breed': breed.split('-', 1)[1].replace('_', ' ').title(),
-                    'confidence': float(prob)
-                }
-                for prob, idx in zip(top_probs.cpu().numpy(), top_indices.cpu().numpy())
-                if float(prob) >= confidence_threshold
-            ]
+            # Update the predictions handling to avoid list index error
+            if len(filtered_probs) == 0:
+                predictions = [{
+                    'breed': 'Unknown',
+                    'confidence': 0.0
+                }]
+            else:
+                predictions = [
+                    {
+                        'breed': BREED_CLASSES[idx].split('-', 1)[1].replace('_', ' ').title(),
+                        'confidence': float(prob)
+                    }
+                    for prob, idx in zip(top_probs.cpu().numpy(), top_indices.cpu().numpy())
+                    if float(prob) >= confidence_threshold
+                ]
             
             # Generate reference images
             reference_images = [

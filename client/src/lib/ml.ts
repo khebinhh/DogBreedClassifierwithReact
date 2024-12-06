@@ -1,7 +1,7 @@
 import * as tf from '@tensorflow/tfjs';
 
 // Model URL for a MobileNetV2 model
-const MODEL_URL = 'https://storage.googleapis.com/tfjs-models/tfjs/mobilenet_v2_1.0_224/model.json';
+const MODEL_URL = 'https://tfhub.dev/google/imagenet/mobilenet_v2_130_224/classification/5';
 
 // Mapping of model output indices to dog breeds
 const BREED_CLASSES = [
@@ -27,10 +27,10 @@ async function loadModel(): Promise<tf.GraphModel> {
       await modelPromise; // Ensure model loads
       console.log('Model loaded successfully');
       return modelPromise;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Model loading error:', error);
       modelPromise = null;
-      throw new Error(`Failed to load model: ${error.message}`);
+      throw new Error(error?.message || 'Failed to load model');
     }
   }
   return modelPromise;
@@ -51,9 +51,9 @@ async function preprocessImage(file: File): Promise<tf.Tensor> {
       console.log('Image preprocessing complete');
       return imgTensor;
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Image preprocessing error:', error);
-    throw new Error(`Failed to preprocess image: ${error.message}`);
+    throw new Error(error?.message || 'Failed to preprocess image');
   }
 }
 
@@ -101,9 +101,9 @@ export async function classifyImage(file: File) {
       referenceImages
     };
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('Classification error:', error);
-    throw new Error(`Failed to classify image: ${error.message}`);
+    throw new Error(error?.message || 'Failed to classify image');
   } finally {
     console.log('Cleaning up tensors...');
     // Clean up all tensors

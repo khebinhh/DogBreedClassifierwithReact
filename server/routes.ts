@@ -30,29 +30,37 @@ export function registerRoutes(app: Express) {
   });
 
   // Handle image upload and classification
-  app.post("/api/classify", upload.single("image"), async (req: MulterRequest, res) => {
+  app.post("/api/classify", upload.single("file"), async (req: MulterRequest, res) => {
     if (!req.file) {
+      console.error("Classification error: No file provided");
       return res.status(400).json({ error: "No image provided" });
     }
 
     try {
+      console.log(`Processing image: ${req.file.originalname}, type: ${req.file.mimetype}, size: ${req.file.size}bytes`);
+      
       // Upload image to a temporary URL (in production, use proper storage)
       const imageUrl = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+      
+      // Create form data for ML service
+      const formData = new FormData();
+      const blob = new Blob([req.file.buffer], { type: req.file.mimetype });
+      formData.append('file', blob, req.file.originalname);
       
       // Process the image using PyTorch service
       const response = await fetch('http://localhost:8000/classify', {
         method: 'POST',
-        body: req.file.buffer,
-        headers: {
-          'Content-Type': 'application/octet-stream'
-        }
+        body: formData,
       });
 
       if (!response.ok) {
-        throw new Error('Classification service failed');
+        const errorText = await response.text();
+        console.error(`ML service error: ${errorText}`);
+        throw new Error(`Classification service failed: ${errorText}`);
       }
 
       const classificationResult = await response.json();
+      console.log('Classification result:', classificationResult);
       const topPrediction = classificationResult.predictions[0];
       
       // Store classification result

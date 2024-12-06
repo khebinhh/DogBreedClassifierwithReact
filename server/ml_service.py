@@ -24,11 +24,15 @@ class DogBreedClassifier:
 
     async def load_model(self):
         if self.model is None:
-            print("Loading ResNet50 model...")
-            self.model = resnet50(weights=ResNet50_Weights.IMAGENET1K_V2)
-            self.model.eval()
-            self.model.to(self.device)
-            print("Model loaded successfully")
+            try:
+                print("Loading ResNet50 model...")
+                self.model = resnet50(weights=ResNet50_Weights.IMAGENET1K_V2)
+                self.model.eval()
+                self.model.to(self.device)
+                print(f"Model loaded successfully on device: {self.device}")
+            except Exception as e:
+                print(f"Error loading model: {str(e)}")
+                raise Exception(f"Failed to load model: {str(e)}")
 
     async def preprocess_image(self, image_bytes):
         image = Image.open(io.BytesIO(image_bytes)).convert('RGB')
@@ -36,17 +40,23 @@ class DogBreedClassifier:
 
     async def classify_image(self, image_bytes):
         try:
-            await self.load_model()
+            print("Starting image classification...")
+            if self.model is None:
+                print("Model not loaded, loading now...")
+                await self.load_model()
             
-            # Preprocess image
+            print("Preprocessing image...")
             input_tensor = await self.preprocess_image(image_bytes)
+            print(f"Input tensor shape: {input_tensor.shape}")
             
             # Get predictions
+            print("Running inference...")
             with torch.no_grad():
                 output = self.model(input_tensor)
                 probabilities = torch.nn.functional.softmax(output[0], dim=0)
             
             # Get top predictions
+            print("Computing top predictions...")
             top_probs, top_indices = torch.topk(probabilities, k=3)
             
             # Convert to list of predictions

@@ -28,12 +28,12 @@ export async function classifyImage(file: File): Promise<ClassificationResult> {
   try {
     console.log('Starting classification process...');
     
-    // Create form data
+    // Create form data with proper file parameter
     const formData = new FormData();
-    formData.append('file', file);
+    formData.append('file', file); // Using 'file' to match FastAPI endpoint
     
-    // Send request to PyTorch backend
-    const response = await fetch('http://localhost:8000/classify', {
+    // Send request to backend with proper headers
+    const response = await fetch('/api/classify', {
       method: 'POST',
       body: formData,
     });

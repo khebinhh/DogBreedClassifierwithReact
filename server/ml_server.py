@@ -2,7 +2,7 @@ import uvicorn
 import torch
 from fastapi import FastAPI, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from ml_service import classifier, CustomResNet, BREED_CLASSES
+from ml_service import classifier, BREED_CLASSES
 
 app = FastAPI()
 

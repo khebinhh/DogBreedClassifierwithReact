@@ -297,31 +297,25 @@ class DogBreedClassifier:
                 output = self.model(input_tensor)
                 probabilities = torch.nn.functional.softmax(output[0], dim=0)
             
-            # Get top predictions with confidence threshold
-            confidence_threshold = 0.01  # 1% minimum confidence
-            filtered_probs = probabilities[probabilities >= confidence_threshold]
-            if len(filtered_probs) == 0:
-                print("No predictions above confidence threshold")
-                filtered_probs = probabilities  # Fallback to top 3 regardless of confidence
-            
+            # Get top predictions
             print("Computing top predictions...")
-            top_probs, top_indices = torch.topk(probabilities, k=min(3, len(filtered_probs)))
+            top_k = 3
+            top_probs, top_indices = torch.topk(probabilities, k=top_k)
             
-            # Update the predictions handling to avoid list index error
-            if len(filtered_probs) == 0:
-                predictions = [{
-                    'breed': 'Unknown',
-                    'confidence': 0.0
-                }]
-            else:
-                predictions = [
-                    {
-                        'breed': BREED_CLASSES[idx].split('-', 1)[1].replace('_', ' ').title(),
-                        'confidence': float(prob)
-                    }
-                    for prob, idx in zip(top_probs.cpu().numpy(), top_indices.cpu().numpy())
-                    if float(prob) >= confidence_threshold
-                ]
+            # Always create predictions, even with low confidence
+            predictions = []
+            for prob, idx in zip(top_probs.cpu().numpy(), top_indices.cpu().numpy()):
+                breed_name = BREED_CLASSES[idx]
+                # Remove ImageNet ID and format breed name
+                if '-' in breed_name:
+                    breed_name = breed_name.split('-', 1)[1]
+                breed_name = breed_name.replace('_', ' ').title()
+                predictions.append({
+                    'breed': breed_name,
+                    'confidence': float(prob)
+                })
+            
+            print(f"Generated predictions: {predictions}")
             
             # Generate reference images
             reference_images = [
@@ -329,12 +323,10 @@ class DogBreedClassifier:
                 for pred in predictions
             ]
             
-            print(f"Generated predictions: {predictions}")
             return {
                 'predictions': predictions,
                 'referenceImages': reference_images
             }
-            
         except Exception as e:
             print(f"Classification error: {str(e)}")
             raise Exception(f"Failed to classify image: {str(e)}")

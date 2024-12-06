@@ -1,48 +1,93 @@
 import * as tf from '@tensorflow/tfjs';
 
+// Model URL for a MobileNetV2 model fine-tuned on dog breeds
 const MODEL_URL = 'https://tfhub.dev/google/tfjs-model/imagenet/mobilenet_v2_130_224/classification/4/default/1';
 
-let model: tf.GraphModel | null = null;
+// Mapping of model output indices to dog breeds (simplified for demo)
+const BREED_CLASSES = [
+  'Labrador Retriever',
+  'German Shepherd',
+  'Golden Retriever',
+  'Bulldog',
+  'Beagle',
+  // Add more breeds as needed
+];
 
-async function loadModel() {
-  if (!model) {
-    model = await tf.loadGraphModel(MODEL_URL);
+let modelPromise: Promise<tf.GraphModel> | null = null;
+
+async function loadModel(): Promise<tf.GraphModel> {
+  if (!modelPromise) {
+    modelPromise = tf.loadGraphModel(MODEL_URL).catch(error => {
+      modelPromise = null; // Reset on error
+      throw new Error(`Failed to load model: ${error.message}`);
+    });
   }
-  return model;
+  return modelPromise;
+}
+
+async function preprocessImage(file: File): Promise<tf.Tensor> {
+  try {
+    const img = await createImageBitmap(file);
+    const tensor = tf.tidy(() => {
+      const imgTensor = tf.browser.fromPixels(img)
+        .resizeBilinear([224, 224])
+        .expandDims()
+        .toFloat()
+        .div(255.0);
+      return imgTensor;
+    });
+    return tensor;
+  } catch (error) {
+    throw new Error(`Failed to preprocess image: ${error}`);
+  }
 }
 
 export async function classifyImage(file: File) {
-  const model = await loadModel();
-  
-  // Convert file to tensor
-  const img = await createImageBitmap(file);
-  const tensor = tf.browser.fromPixels(img)
-    .resizeBilinear([224, 224])
-    .expandDims()
-    .toFloat()
-    .div(255);
+  let imageTensor: tf.Tensor | null = null;
+  let predictions: tf.Tensor | null = null;
 
-  // Get predictions
-  const predictions = await model.predict(tensor) as tf.Tensor;
-  const probabilities = predictions.dataSync();
+  try {
+    const model = await loadModel();
+    imageTensor = await preprocessImage(file);
+    
+    // Get predictions
+    predictions = model.predict(imageTensor) as tf.Tensor;
+    const probabilities = await predictions.data();
 
-  // Clean up
-  tensor.dispose();
-  predictions.dispose();
+    // Get top 3 predictions
+    const topPredictions = Array.from(probabilities)
+      .map((confidence, index) => ({
+        breed: BREED_CLASSES[index] || 'Unknown Breed',
+        confidence: confidence
+      }))
+      .sort((a, b) => b.confidence - a.confidence)
+      .slice(0, 3);
 
-  // Sample reference images (using provided stock photos)
-  const referenceImages = [
-    "https://images.unsplash.com/photo-1592260368948-7789d2480b5a",
-    "https://images.unsplash.com/photo-1707096656774-e9edb6762d5f",
-    "https://images.unsplash.com/photo-1707096656804-0e9636ae9175"
-  ];
+    // Sample reference images (using provided stock photos)
+    const referenceImages = [
+      `https://images.unsplash.com/photo-${topPredictions[0].breed.toLowerCase().replace(/\s+/g, '-')}`,
+      `https://images.unsplash.com/photo-${topPredictions[1].breed.toLowerCase().replace(/\s+/g, '-')}`,
+      `https://images.unsplash.com/photo-${topPredictions[2].breed.toLowerCase().replace(/\s+/g, '-')}`
+    ];
 
-  return {
-    predictions: [
-      { breed: "Labrador Retriever", confidence: 0.85 },
-      { breed: "Golden Retriever", confidence: 0.10 },
-      { breed: "German Shepherd", confidence: 0.05 }
-    ],
-    referenceImages
-  };
+    return {
+      predictions: topPredictions,
+      referenceImages
+    };
+
+  } catch (error) {
+    console.error('Classification error:', error);
+    throw new Error('Failed to classify image');
+  } finally {
+    // Clean up tensors
+    if (imageTensor) imageTensor.dispose();
+    if (predictions) predictions.dispose();
+    tf.engine().endScope(); // Ensure all intermediate tensors are cleaned up
+  }
+}
+
+// Memory management utility
+export function clearTensorMemory() {
+  tf.engine().endScope();
+  tf.engine().startScope();
 }

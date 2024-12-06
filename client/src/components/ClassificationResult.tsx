@@ -72,12 +72,12 @@ export default function ClassificationResult({ image, processing }: Classificati
             <Skeleton className="h-32 w-full" />
           </div>
         </div>
-      ) : (
+      ) : result ? (
         <>
           <h3 className="text-xl font-semibold">Classification Results</h3>
           
           <div className="grid gap-4">
-            {data?.predictions.map((pred, idx) => (
+            {result.predictions.map((pred, idx) => (
               <Card key={idx} className="p-4">
                 <div className="flex justify-between items-center mb-2">
                   <span className="font-medium">{pred.breed}</span>
@@ -91,17 +91,26 @@ export default function ClassificationResult({ image, processing }: Classificati
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            {data?.referenceImages.map((img, idx) => (
-              <img
-                key={idx}
-                src={img}
-                alt={`Reference ${idx + 1}`}
-                className="rounded-lg object-cover aspect-square"
-              />
+            {result.referenceImages.map((img, idx) => (
+              <Card key={idx} className="p-2 overflow-hidden">
+                <div className="aspect-square relative">
+                  <img
+                    src={img}
+                    alt={`Reference ${result.predictions[idx].breed}`}
+                    className="absolute inset-0 w-full h-full object-cover rounded-lg"
+                    onError={(e) => {
+                      e.currentTarget.src = `https://source.unsplash.com/400x400/?${result.predictions[idx].breed},dog`;
+                    }}
+                  />
+                </div>
+                <p className="mt-2 text-sm text-center text-gray-600">
+                  {result.predictions[idx].breed}
+                </p>
+              </Card>
             ))}
           </div>
         </>
-      )}
+      ) : null}
     </div>
   );
 }

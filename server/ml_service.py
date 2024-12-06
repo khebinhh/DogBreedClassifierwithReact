@@ -296,6 +296,9 @@ class DogBreedClassifier:
             with torch.no_grad():
                 output = self.model(input_tensor)
                 probabilities = torch.nn.functional.softmax(output[0], dim=0)
+                # Scale probabilities to be more meaningful
+                probabilities = probabilities ** 0.5  # Reduce extreme differences
+                probabilities = probabilities / probabilities.sum()  # Renormalize
             
             # Get top predictions
             print("Computing top predictions...")

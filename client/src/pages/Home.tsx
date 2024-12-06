@@ -24,14 +24,24 @@ export default function Home() {
         body: formData,
       });
       
-      if (!response.ok) throw new Error("Classification failed");
+      if (!response.ok) {
+        const errorData = await response.text();
+        throw new Error(errorData || "Classification failed");
+      }
+
+      const result = await response.json();
+      if (!result.predictions || !Array.isArray(result.predictions)) {
+        throw new Error("Invalid response format");
+      }
       
-    } catch (error) {
+    } catch (error: any) {
+      console.error("Classification error:", error);
       toast({
         title: "Error",
-        description: "Failed to process image. Please try again.",
+        description: error.message || "Failed to process image. Please try again.",
         variant: "destructive",
       });
+      setSelectedImage(null);
     } finally {
       setProcessing(false);
     }

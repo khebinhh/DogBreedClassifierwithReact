@@ -41,34 +41,27 @@ async def classify_image(file: UploadFile):
 async def startup_event():
     try:
         print("Initializing ML service...")
-        classifier.device = torch.device('cpu')  # Force CPU usage for Replit
-        print(f"Using device: {classifier.device}")
-        
-        # Initialize the model
-        if classifier.model is None:
-            classifier.model = CustomResNet(len(BREED_CLASSES))
-            classifier.model.eval()
-            classifier.model.to(classifier.device)
-            print("Model initialized successfully")
+        # Initialize model at startup
+        await classifier.load_model()
+        print("ML service initialized successfully")
     except Exception as e:
         print(f"Error during initialization: {str(e)}")
         raise
 
 if __name__ == "__main__":
+    import sys
     try:
-        print("Starting ML service...")
-        # Initialize model before starting server
-        classifier.device = torch.device('cpu')
-        if classifier.model is None:
-            classifier.model = CustomResNet(len(BREED_CLASSES))
-            classifier.model.eval()
-            classifier.model.to(classifier.device)
-            print("Model initialized successfully")
-        
-        # Start the server
-        uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
+        print("Starting FastAPI server on port 8000...")
+        uvicorn.run(
+            "ml_server:app",
+            host="0.0.0.0",
+            port=8000,
+            log_level="debug",
+            access_log=True,
+            workers=1
+        )
     except Exception as e:
         print(f"Failed to start ML service: {str(e)}")
         import traceback
         traceback.print_exc()
-        raise
+        sys.exit(1)

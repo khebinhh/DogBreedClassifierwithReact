@@ -99,7 +99,8 @@ export default function ClassificationResult({ image, processing }: Classificati
                     alt={`Reference ${result.predictions[idx].breed}`}
                     className="absolute inset-0 w-full h-full object-cover rounded-lg"
                     onError={(e) => {
-                      e.currentTarget.src = `https://source.unsplash.com/400x400/?${result.predictions[idx].breed},dog`;
+                      const breed = result.predictions[idx].breed.replace(' ', '+');
+                      e.currentTarget.src = `https://dog.ceo/api/breed/${breed.toLowerCase()}/images/random`;
                     }}
                   />
                 </div>

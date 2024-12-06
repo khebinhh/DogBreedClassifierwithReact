@@ -12,7 +12,7 @@ const upload = multer({
 });
 
 interface MulterRequest extends Request {
-  file: Express.Multer.File;
+  file?: Express.Multer.File;
 }
 
 export function registerRoutes(app: Express) {

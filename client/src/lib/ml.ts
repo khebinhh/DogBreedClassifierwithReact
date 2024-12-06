@@ -1,7 +1,7 @@
 import * as tf from '@tensorflow/tfjs';
 
 // Model URL for a MobileNetV2 model fine-tuned on dog breeds
-const MODEL_URL = 'https://tfhub.dev/google/tfjs-model/imagenet/mobilenet_v2_130_224/classification/4/default/1';
+const MODEL_URL = 'https://storage.googleapis.com/tfjs-models/tfjs/mobilenet_v2_1.0_224/model.json';
 
 // Mapping of model output indices to dog breeds (simplified for demo)
 const BREED_CLASSES = [
@@ -17,10 +17,14 @@ let modelPromise: Promise<tf.GraphModel> | null = null;
 
 async function loadModel(): Promise<tf.GraphModel> {
   if (!modelPromise) {
-    modelPromise = tf.loadGraphModel(MODEL_URL).catch(error => {
+    try {
+      modelPromise = tf.loadGraphModel(MODEL_URL);
+      await modelPromise; // Ensure model loads successfully
+    } catch (error) {
       modelPromise = null; // Reset on error
-      throw new Error(`Failed to load model: ${error.message}`);
-    });
+      console.error('Model loading error:', error);
+      throw new Error('Failed to load the ML model. Please try again later.');
+    }
   }
   return modelPromise;
 }

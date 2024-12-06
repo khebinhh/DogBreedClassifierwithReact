@@ -1,30 +1,32 @@
 import * as tf from '@tensorflow/tfjs';
 
 // Model URL for a MobileNetV2 model fine-tuned on dog breeds
-const MODEL_URL = 'https://storage.googleapis.com/tfjs-models/tfjs/mobilenet_v2_1.0_224/model.json';
+const MODEL_URL = 'https://tfhub.dev/google/tfjs-model/mobilenet_v2_130_224/classification/3/default/1';
 
-// Mapping of model output indices to dog breeds (simplified for demo)
+// Mapping of model output indices to dog breeds
 const BREED_CLASSES = [
-  'Labrador Retriever',
-  'German Shepherd',
+  'Labrador',
   'Golden Retriever',
+  'German Shepherd',
   'Bulldog',
+  'Poodle',
   'Beagle',
-  // Add more breeds as needed
+  'Rottweiler',
+  'Yorkshire Terrier',
+  'Boxer',
+  'Dachshund'
 ];
 
 let modelPromise: Promise<tf.GraphModel> | null = null;
 
 async function loadModel(): Promise<tf.GraphModel> {
   if (!modelPromise) {
-    try {
-      modelPromise = tf.loadGraphModel(MODEL_URL);
-      await modelPromise; // Ensure model loads successfully
-    } catch (error) {
-      modelPromise = null; // Reset on error
-      console.error('Model loading error:', error);
-      throw new Error('Failed to load the ML model. Please try again later.');
-    }
+    modelPromise = tf.loadGraphModel(MODEL_URL, {fromTFHub: true})
+      .catch(error => {
+        modelPromise = null;
+        console.error('Model loading error:', error);
+        throw new Error(`Failed to load model: ${error.message}`);
+      });
   }
   return modelPromise;
 }
@@ -49,30 +51,37 @@ async function preprocessImage(file: File): Promise<tf.Tensor> {
 export async function classifyImage(file: File) {
   let imageTensor: tf.Tensor | null = null;
   let predictions: tf.Tensor | null = null;
+  let intermediateTensors: tf.Tensor[] = [];
 
   try {
+    // Start a new scope to better manage memory
+    tf.engine().startScope();
+    
     const model = await loadModel();
     imageTensor = await preprocessImage(file);
     
     // Get predictions
-    predictions = model.predict(imageTensor) as tf.Tensor;
+    predictions = tf.tidy(() => {
+      const pred = model.predict(imageTensor!) as tf.Tensor;
+      // Softmax to get probabilities
+      return tf.softmax(pred);
+    });
+    
     const probabilities = await predictions.data();
 
     // Get top 3 predictions
     const topPredictions = Array.from(probabilities)
       .map((confidence, index) => ({
         breed: BREED_CLASSES[index] || 'Unknown Breed',
-        confidence: confidence
+        confidence: parseFloat(confidence.toFixed(4))
       }))
       .sort((a, b) => b.confidence - a.confidence)
       .slice(0, 3);
 
-    // Sample reference images (using provided stock photos)
-    const referenceImages = [
-      `https://images.unsplash.com/photo-${topPredictions[0].breed.toLowerCase().replace(/\s+/g, '-')}`,
-      `https://images.unsplash.com/photo-${topPredictions[1].breed.toLowerCase().replace(/\s+/g, '-')}`,
-      `https://images.unsplash.com/photo-${topPredictions[2].breed.toLowerCase().replace(/\s+/g, '-')}`
-    ];
+    // Generate reference image URLs based on breed names
+    const referenceImages = topPredictions.map(pred => 
+      `https://source.unsplash.com/featured/?${encodeURIComponent(pred.breed.toLowerCase())},dog`
+    );
 
     return {
       predictions: topPredictions,
@@ -81,12 +90,19 @@ export async function classifyImage(file: File) {
 
   } catch (error) {
     console.error('Classification error:', error);
-    throw new Error('Failed to classify image');
+    throw new Error('Failed to classify image. Please try again with a different image.');
   } finally {
-    // Clean up tensors
-    if (imageTensor) imageTensor.dispose();
-    if (predictions) predictions.dispose();
-    tf.engine().endScope(); // Ensure all intermediate tensors are cleaned up
+    // Clean up all tensors
+    if (imageTensor) {
+      tf.dispose(imageTensor);
+    }
+    if (predictions) {
+      tf.dispose(predictions);
+    }
+    intermediateTensors.forEach(tensor => {
+      if (tensor) tf.dispose(tensor);
+    });
+    tf.engine().endScope();
   }
 }
 

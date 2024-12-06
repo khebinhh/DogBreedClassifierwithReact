@@ -1,7 +1,8 @@
 import uvicorn
+import torch
 from fastapi import FastAPI, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from ml_service import classifier
+from ml_service import classifier, CustomResNet, BREED_CLASSES
 
 app = FastAPI()
 
@@ -36,5 +37,27 @@ async def classify_image(file: UploadFile):
         print(f"Error processing image: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Classification failed: {str(e)}")
 
+@app.on_event("startup")
+async def startup_event():
+    try:
+        print("Initializing ML service...")
+        classifier.device = torch.device('cpu')  # Force CPU usage for Replit
+        print(f"Using device: {classifier.device}")
+        
+        # Initialize the model
+        if classifier.model is None:
+            classifier.model = CustomResNet(len(BREED_CLASSES))
+            classifier.model.eval()
+            classifier.model.to(classifier.device)
+            print("Model initialized successfully")
+    except Exception as e:
+        print(f"Error during initialization: {str(e)}")
+        raise
+
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    try:
+        print("Starting ML service...")
+        uvicorn.run(app, host="0.0.0.0", port=8000)
+    except Exception as e:
+        print(f"Failed to start ML service: {str(e)}")
+        raise

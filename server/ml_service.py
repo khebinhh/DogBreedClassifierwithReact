@@ -12,13 +12,63 @@ import requests
 from tqdm import tqdm
 import tarfile
 
-# Stanford Dogs Dataset classes
+# Stanford Dogs Dataset classes (all 120 breeds)
 BREED_CLASSES = [
     'n02085620-Chihuahua', 'n02085782-Japanese_spaniel', 'n02085936-Maltese_dog',
     'n02086079-Pekinese', 'n02086240-Shih-Tzu', 'n02086646-Blenheim_spaniel',
     'n02086910-papillon', 'n02087046-toy_terrier', 'n02087394-Rhodesian_ridgeback',
-    'n02088094-Afghan_hound'
-]  # Note: This is a subset of the full 120 classes for initial testing
+    'n02088094-Afghan_hound', 'n02088238-Basset', 'n02088364-Beagle',
+    'n02088466-Bloodhound', 'n02088632-Bluetick', 'n02089078-Black-and-tan_coonhound',
+    'n02089867-Walker_hound', 'n02089973-English_foxhound', 'n02090379-Redbone',
+    'n02090622-Borzoi', 'n02090721-Irish_wolfhound', 'n02091032-Italian_greyhound',
+    'n02091134-Whippet', 'n02091244-Ibizan_hound', 'n02091467-Norwegian_elkhound',
+    'n02091635-Otterhound', 'n02091831-Saluki', 'n02092002-Scottish_deerhound',
+    'n02092339-Weimaraner', 'n02093256-Staffordshire_bullterrier',
+    'n02093428-American_Staffordshire_terrier', 'n02093647-Bedlington_terrier',
+    'n02093754-Border_terrier', 'n02093859-Kerry_blue_terrier',
+    'n02093991-Irish_terrier', 'n02094114-Norfolk_terrier',
+    'n02094258-Norwich_terrier', 'n02094433-Yorkshire_terrier',
+    'n02095314-Wire-haired_fox_terrier', 'n02095570-Lakeland_terrier',
+    'n02095889-Sealyham_terrier', 'n02096051-Airedale',
+    'n02096177-Cairn', 'n02096294-Australian_terrier',
+    'n02096437-Dandie_Dinmont', 'n02096585-Boston_bull',
+    'n02097047-Miniature_schnauzer', 'n02097130-Giant_schnauzer',
+    'n02097209-Standard_schnauzer', 'n02097298-Scotch_terrier',
+    'n02097474-Tibetan_terrier', 'n02097658-Silky_terrier',
+    'n02098105-Soft-coated_wheaten_terrier', 'n02098286-West_Highland_white_terrier',
+    'n02098413-Lhasa', 'n02099267-Flat-coated_retriever',
+    'n02099429-Curly-coated_retriever', 'n02099601-Golden_retriever',
+    'n02099712-Labrador_retriever', 'n02099849-Chesapeake_Bay_retriever',
+    'n02100236-German_short-haired_pointer', 'n02100583-Vizsla',
+    'n02100735-English_setter', 'n02100877-Irish_setter',
+    'n02101006-Gordon_setter', 'n02101388-Brittany_spaniel',
+    'n02101556-Clumber', 'n02102040-English_springer',
+    'n02102177-Welsh_springer_spaniel', 'n02102318-Cocker_spaniel',
+    'n02102480-Sussex_spaniel', 'n02102973-Irish_water_spaniel',
+    'n02104029-Kuvasz', 'n02104365-Schipperke', 'n02105056-Groenendael',
+    'n02105162-Malinois', 'n02105251-Briard', 'n02105412-Kelpie',
+    'n02105505-Komondor', 'n02105641-Old_English_sheepdog',
+    'n02105855-Shetland_sheepdog', 'n02106030-Collie',
+    'n02106166-Border_collie', 'n02106382-Bouvier_des_Flandres',
+    'n02106550-Rottweiler', 'n02106662-German_shepherd',
+    'n02107142-Doberman', 'n02107312-Miniature_pinscher',
+    'n02107574-Greater_Swiss_Mountain_dog', 'n02107683-Bernese_mountain_dog',
+    'n02107908-Appenzeller', 'n02108000-EntleBucher',
+    'n02108089-Boxer', 'n02108422-Bull_mastiff', 'n02108551-Tibetan_mastiff',
+    'n02108915-French_bulldog', 'n02109047-Great_Dane',
+    'n02109525-Saint_Bernard', 'n02109961-Eskimo_dog',
+    'n02110063-Malamute', 'n02110185-Siberian_husky',
+    'n02110341-Dalmatian', 'n02110627-Affenpinscher',
+    'n02110806-Basenji', 'n02110958-Pug', 'n02111129-Leonberg',
+    'n02111277-Newfoundland', 'n02111500-Great_Pyrenees',
+    'n02111889-Samoyed', 'n02112018-Pomeranian', 'n02112137-Chow',
+    'n02112350-Keeshond', 'n02112706-Brabancon_griffon',
+    'n02113023-Pembroke', 'n02113186-Cardigan', 'n02113624-Toy_poodle',
+    'n02113712-Miniature_poodle', 'n02113799-Standard_poodle',
+    'n02113978-Mexican_hairless', 'n02114367-Timber_wolf',
+    'n02114548-White_wolf', 'n02114712-Red_wolf', 'n02114855-Coyote',
+    'n02115641-Dingo', 'n02115913-Dhole', 'n02116738-African_hunting_dog'
+]
 
 DATASET_URL = "http://vision.stanford.edu/aditya86/ImageNetDogs/images.tar"
 MODEL_PATH = "models/dog_classifier.pth"
@@ -50,17 +100,35 @@ class CustomResNet(nn.Module):
         super(CustomResNet, self).__init__()
         # Load pre-trained ResNet50
         self.resnet = resnet50(weights=ResNet50_Weights.IMAGENET1K_V2)
-        # Replace the final fully connected layer
+        # Replace the final fully connected layers with a more robust classifier
         num_features = self.resnet.fc.in_features
         self.resnet.fc = nn.Sequential(
-            nn.Linear(num_features, 512),
+            nn.Linear(num_features, 1024),
             nn.ReLU(),
-            nn.Dropout(0.5),
+            nn.BatchNorm1d(1024),
+            nn.Dropout(0.4),
+            nn.Linear(1024, 512),
+            nn.ReLU(),
+            nn.BatchNorm1d(512),
+            nn.Dropout(0.4),
             nn.Linear(512, num_classes)
         )
     
     def forward(self, x):
         return self.resnet(x)
+
+    @staticmethod
+    def validate_breed_classes():
+        """Validate that all breed classes are properly formatted"""
+        try:
+            for breed in BREED_CLASSES:
+                if not breed.startswith('n') or not '-' in breed:
+                    raise ValueError(f"Invalid breed format: {breed}")
+            print(f"Successfully validated {len(BREED_CLASSES)} breed classes")
+            return True
+        except Exception as e:
+            print(f"Error validating breed classes: {str(e)}")
+            return False
 
 class DogBreedClassifier:
     def __init__(self):
@@ -220,11 +288,15 @@ class DogBreedClassifier:
                 for prob, idx in zip(top_probs.cpu().numpy(), top_indices.cpu().numpy())
             ]
             
-            # Generate reference images
-            reference_images = [
-                f"https://source.unsplash.com/featured/?{pred['breed'].lower()},dog"
-                for pred in predictions
-            ]
+            # Generate reference images with proper breed name formatting
+            reference_images = []
+            for pred in predictions:
+                # Extract the actual breed name from the class ID (remove the initial n* prefix)
+                breed_name = pred['breed'].split('-', 1)[1].replace('_', ' ').title()
+                reference_images.append(
+                    f"https://source.unsplash.com/featured/?{breed_name},dog"
+                )
+                print(f"Generated reference image for breed: {breed_name}")
             
             return {
                 'predictions': predictions,
